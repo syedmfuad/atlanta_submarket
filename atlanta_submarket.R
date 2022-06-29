@@ -24,6 +24,7 @@ rm(list=ls())
 set.seed(12345)
 data <- read.csv("atlanta single family.csv")
 data$sqft <- as.numeric(data$sqft)
+data <- subset(data, sqft>0)
 
 data$lon <- -1*data$lon
 data$plon <- 0 #84.3563
@@ -276,9 +277,9 @@ datanew$prob <- ifelse(datanew$`1` > datanew$`2`, 1, 2)
 data1 <- subset(datanew, prob==1)
 data2 <- subset(datanew, prob==2)
 
-data1 %>% get_summary_stats(ENGMeanScaleScore15, calcacres, median_income, age, pct_white, pct_black, 
+data1 %>% get_summary_stats(salesprice, ENGMeanScaleScore15, calcacres, median_income, age, pct_white, pct_black, 
                             pct_collegeDegree, median_house_value, HHsize, type = "mean_sd") -> sumdata1
-data2 %>% get_summary_stats(ENGMeanScaleScore15, calcacres, median_income, age, pct_white, pct_black, 
+data2 %>% get_summary_stats(salesprice, ENGMeanScaleScore15, calcacres, median_income, age, pct_white, pct_black, 
                             pct_collegeDegree, median_house_value, HHsize, type = "mean_sd") -> sumdata2
 
 LL <- FnTwo(par3,d=d,x=X,y=Y) + FnFour(g,d=d,z=Z,y=Y);
@@ -298,6 +299,64 @@ pred <- (X%*%b[,1]*Ds[,1] + X%*%b[,2]*Ds[,2])*100000
 
 resid <- Y-pred
 rmse2 <- sqrt(mean((resid)^2))
+
+########## EXTRA OLS ##########
+
+prob <- read.csv("prob2.csv")
+datanew <- cbind(newdata, prob)
+datanew$prob <- ifelse(datanew$V1 > datanew$V2, 1, 2)
+
+data1 <- subset(datanew, prob==1)
+data2 <- subset(datanew, prob==2)
+
+data1 %>% get_summary_stats(salesprice, ENGMeanScaleScore15, calcacres, median_income, age, pct_white, pct_black, 
+                            pct_collegeDegree, median_house_value, HHsize, type = "mean_sd") -> sumdata1
+data2 %>% get_summary_stats(salesprice, ENGMeanScaleScore15, calcacres, median_income, age, pct_white, pct_black, 
+                            pct_collegeDegree, median_house_value, HHsize, type = "mean_sd") -> sumdata2
+
+LL <- FnTwo(par3,d=d,x=X,y=Y) + FnFour(g,d=d,z=Z,y=Y);
+AIC <- -2*LL+2*niv
+
+##### OLS #####
+
+data_ols <- subset(datanew, prob==2) #change prob==2
+
+Y <- I(data_ols$salesprice)/100000
+
+X <- cbind(1, I(log(data_ols$calcacres)), I(log((data_ols$ENGMeanScaleScore15)/100)), I(log((data_ols$median_income)/10000)), I(data_ols$age), 
+           I(data_ols$age*data_ols$age)/1000, I(data_ols$totbath), I(data_ols$stories), I(data_ols$centheat), I(data_ols$fourthquart),
+           I(data_ols$pct_renter_occupied), I(data_ols$sqft)/1000, I(data_ols$lon-data_ols$plon), I(data_ols$lat-data_ols$plat), 
+           I((data_ols$lon-data_ols$plon)^2)/1000, I((data_ols$lat-data_ols$plat)^2)/1000)
+
+X <- cbind(1, I(log(data_ols$calcacres)), I(log((data_ols$ENGMeanScaleScore15)/100)), I(log((data_ols$median_income)/10000)), I(data_ols$age), 
+           I(data_ols$age*data_ols$age)/1000, I(data_ols$totbath), I(data_ols$stories), I(data_ols$centheat), I(data_ols$fourthquart),
+           I(data_ols$pct_renter_occupied), I(data_ols$sqft)/1000, I(data_ols$lon-data_ols$plon), I(data_ols$lat-data_ols$plat), 
+           I((data_ols$lon-data_ols$plon)^2)/1000, I((data_ols$lat-data_ols$plat)^2)/1000, 
+           I(log(data_ols$calcacres_n)), I(log((data_ols$ENGMeanScaleScore15_n)/100)), I(log((data_ols$median_income_n)/10000)), I(data_ols$age_n), 
+           I(data_ols$age_n*data_ols$age_n)/1000, I(data_ols$totbath_n), I(data_ols$stories_n), I(data_ols$centheat_n), I(data_ols$fourthquart_n),
+           I(data_ols$pct_renter_occupied_n), I(data_ols$sqft_n)/1000, I(data_ols$lon_n-data_ols$plon_n), I(data_ols$lat_n-data_ols$plat_n), 
+           I((data_ols$lon_n-data_ols$plon_n)^2)/1000, I((data_ols$lat_n-data_ols$plat_n)^2)/1000)
+
+
+ols_agg <- lm(Y~X-1);
+summary(ols_agg)
+deviance(ols_agg)
+
+#weighted RMSE
+
+Y <- I(datanew$salesprice)/100000
+
+X <- cbind(1, I(log(datanew$calcacres)), I(log((datanew$ENGMeanScaleScore15)/100)), I(log((datanew$median_income)/10000)), I(datanew$age), 
+           I(datanew$age*datanew$age)/1000, I(datanew$totbath), I(datanew$stories), I(datanew$centheat), I(datanew$fourthquart),
+           I(datanew$pct_renter_occupied), I(datanew$sqft)/1000, I(datanew$lon-datanew$plon), I(datanew$lat-datanew$plat), 
+           I((datanew$lon-datanew$plon)^2)/1000, I((datanew$lat-datanew$plat)^2)/1000)
+
+ols_agg <- lm(Y~X-1);
+pred <- predict(ols_agg, newdata = data.frame(X))
+sqrt(mean((Y - pred*datanew$V1-pred*datanew$V2)^2))*100000
+
+
+
 
 
 
