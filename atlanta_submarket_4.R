@@ -10,7 +10,8 @@ data$plon <- 0 #84.3563
 data$plat <- 0 #33.7663
 
 data %>% select(salesprice, calcacres, ENGMeanScaleScore15, median_income, age, totbath, stories, centheat, fourthquart, pct_renter_occupied,
-                sqft, lon, plon, lat, plat, pct_white, pct_black, pct_collegeDegree, median_house_value, HHsize) -> data
+                sqft, lon, plon, lat, plat, pct_white, pct_black, pct_collegeDegree, median_house_value, HHsize, tract_cover,
+                total_crime_house) -> data
 data$lon <- -1*data$lon
 data <- data[complete.cases(data), ]
 
@@ -28,7 +29,8 @@ newdata <- cbind(data, data[min.d,], apply(d, 1, function(x) sort(x, decreasing=
 
 colnames(newdata) <- c(colnames(data), "salesprice_n", "calcacres_n", "ENGMeanScaleScore15_n", "median_income_n", "age_n", "totbath_n",
                        "stories_n", "centheat_n", "fourthquart_n", "pct_renter_occupied_n", "sqft_n", "lon_n", "plon_n", "lat_n", "plat_n",
-                       "pct_white_n", "pct_black_n", "pct_collegeDegree_n", "median_house_value_n", "HHsize_n", "distance")
+                       "pct_white_n", "pct_black_n", "pct_collegeDegree_n", "median_house_value_n", "HHsize_n", "tract_cover_n", 
+                       "total_crime_house_n", "distance")
 
 
 #fully endogenized
@@ -36,7 +38,8 @@ colnames(newdata) <- c(colnames(data), "salesprice_n", "calcacres_n", "ENGMeanSc
 data <- newdata
 
 data %>% select(salesprice, calcacres, ENGMeanScaleScore15, median_income, age, totbath, stories, centheat, fourthquart, pct_renter_occupied,
-                sqft, lon, plon, lat, plat, pct_white, pct_black, pct_collegeDegree, median_house_value, HHsize) -> data
+                sqft, lon, plon, lat, plat, pct_white, pct_black, pct_collegeDegree, median_house_value, HHsize, tract_cover, 
+                total_crime_house) -> data
 data <- data[complete.cases(data), ]
 
 Y <- I(data$salesprice)/100000
@@ -45,12 +48,13 @@ Y <- I(data$salesprice)/100000
 
 X <- cbind(1, I(log(data$calcacres)), I(log((data$ENGMeanScaleScore15)/100)), I(log((data$median_income)/10000)), I(data$age), 
            I(data$age*data$age)/1000, I(data$totbath), I(data$stories), I(data$centheat), I(data$fourthquart), I(data$pct_renter_occupied),
-           I(data$sqft)/1000, I(data$lon-data$plon), I(data$lat-data$plat), I((data$lon-data$plon)^2)/1000, I((data$lat-data$plat)^2)/1000)
+           I(data$sqft)/1000, I(data$lon-data$plon), I(data$lat-data$plat), I((data$lon-data$plon)^2)/1000, I((data$lat-data$plat)^2)/1000,
+           I(data$tract_cover), I(data$total_crime_house))
 
 #demographic variables/mixing variables 
 
-Z <- cbind(1,I(data$ENGMeanScaleScore15)/100, I(data$calcacres), I(data$median_income)/10000, I(data$age), I(data$pct_white), I(data$pct_black),
-           I(data$pct_collegeDegree), I(data$median_house_value)/100000, I(data$HHsize))
+Z <- cbind(1,I(data$ENGMeanScaleScore15)/100, I(data$calcacres), I(data$median_income)/10000, I(data$pct_black), I(data$pct_renter_occupied),
+           I(data$pct_collegeDegree), I(data$median_house_value)/100000, I(data$tract_cover), I(data$total_crime_house))
 
 ols_agg <- lm(Y~X-1);
 summary(ols_agg)
@@ -250,7 +254,7 @@ par3 <- c(b1,s);
 ########## EXTRA ##########
 
 datanew <- cbind(newdata, d)
-datanew$prob <- colnames(datanew[, c(42:45)])[apply(datanew[, c(42:45)],1,which.max)]
+datanew$prob <- colnames(datanew[, c(46:49)])[apply(datanew[, c(46:49)],1,which.max)]
 datanew$prob <- as.numeric(datanew$prob)
 
 data1 <- subset(datanew, prob==1)
@@ -259,13 +263,13 @@ data3 <- subset(datanew, prob==3)
 data4 <- subset(datanew, prob==4)
 
 data1 %>% get_summary_stats(salesprice, ENGMeanScaleScore15, calcacres, median_income, age, pct_white, pct_black, 
-                            pct_collegeDegree, median_house_value, HHsize, sqft, type = "mean_sd") -> sumdata1
+                            pct_collegeDegree, median_house_value, HHsize, tract_cover, total_crime_house, pct_renter_occupied, type = "mean_sd") -> sumdata1
 data2 %>% get_summary_stats(salesprice, ENGMeanScaleScore15, calcacres, median_income, age, pct_white, pct_black, 
-                            pct_collegeDegree, median_house_value, HHsize, sqft, type = "mean_sd") -> sumdata2
+                            pct_collegeDegree, median_house_value, HHsize, tract_cover, total_crime_house, pct_renter_occupied, type = "mean_sd") -> sumdata2
 data3 %>% get_summary_stats(salesprice, ENGMeanScaleScore15, calcacres, median_income, age, pct_white, pct_black, 
-                            pct_collegeDegree, median_house_value, HHsize, sqft, type = "mean_sd") -> sumdata3
+                            pct_collegeDegree, median_house_value, HHsize, tract_cover, total_crime_house, pct_renter_occupied, type = "mean_sd") -> sumdata3
 data4 %>% get_summary_stats(salesprice, ENGMeanScaleScore15, calcacres, median_income, age, pct_white, pct_black, 
-                            pct_collegeDegree, median_house_value, HHsize, sqft, type = "mean_sd") -> sumdata4
+                            pct_collegeDegree, median_house_value, HHsize, tract_cover, total_crime_house, pct_renter_occupied, type = "mean_sd") -> sumdata4
 
 LL <- FnTwo(par3,d=d,x=X,y=Y) + FnFour(g,d=d,z=Z,y=Y);
 AIC <- -2*LL+2*niv
@@ -278,7 +282,8 @@ gamma=cbind(g[1:gvs],g[(gvs+1):(2*gvs)]);
 
 X <- cbind(1, I(log(data$calcacres)), I(log((data$ENGMeanScaleScore15)/100)), I(log((data$median_income)/10000)), I(data$age), 
            I(data$age*data$age)/1000, I(data$totbath), I(data$stories), I(data$centheat), I(data$fourthquart), I(data$pct_renter_occupied),
-           I(data$sqft)/1000, I(data$lon-data$plon), I(data$lat-data$plat), I((data$lon-data$plon)^2)/1000, I((data$lat-data$plat)^2)/1000)
+           I(data$sqft)/1000, I(data$lon-data$plon), I(data$lat-data$plat), I((data$lon-data$plon)^2)/1000, I((data$lat-data$plat)^2)/1000,
+           I(data$tract_cover), I(data$total_crime_house))
 
 pred <- (X%*%b[,1]*Ds[,1] + X%*%b[,2]*Ds[,2] + X%*%b[,3]*Ds[,3] + X%*%b[,4]*Ds[,4])*100000
 
@@ -289,7 +294,7 @@ rmse2 <- sqrt(mean((resid)^2))
 
 prob <- read.csv("prob4.csv")
 datanew <- cbind(newdata, prob)
-datanew$prob <- colnames(datanew[, c(43:46)])[apply(datanew[, c(43:46)],1,which.max)]
+datanew$prob <- colnames(datanew[, c(46:49)])[apply(datanew[, c(46:49)],1,which.max)]
 datanew$prob <- ifelse(datanew$prob=="V1", 1, ifelse(datanew$prob=="V2", 2, ifelse(datanew$prob=="V3", 3, 4)))
 
 data1 <- subset(datanew, prob==1)
@@ -298,13 +303,13 @@ data3 <- subset(datanew, prob==3)
 data4 <- subset(datanew, prob==4)
 
 data1 %>% get_summary_stats(salesprice, ENGMeanScaleScore15, calcacres, median_income, age, pct_white, pct_black, 
-                            pct_collegeDegree, median_house_value, HHsize, type = "mean_sd") -> sumdata1
+                            pct_collegeDegree, median_house_value, HHsize, tract_cover, total_crime_house, pct_renter_occupied, type = "mean_sd") -> sumdata1
 data2 %>% get_summary_stats(salesprice, ENGMeanScaleScore15, calcacres, median_income, age, pct_white, pct_black, 
-                            pct_collegeDegree, median_house_value, HHsize, type = "mean_sd") -> sumdata2
+                            pct_collegeDegree, median_house_value, HHsize, tract_cover, total_crime_house, pct_renter_occupied, type = "mean_sd") -> sumdata2
 data3 %>% get_summary_stats(salesprice, ENGMeanScaleScore15, calcacres, median_income, age, pct_white, pct_black, 
-                            pct_collegeDegree, median_house_value, HHsize, type = "mean_sd") -> sumdata3
+                            pct_collegeDegree, median_house_value, HHsize, tract_cover, total_crime_house, pct_renter_occupied, type = "mean_sd") -> sumdata3
 data4 %>% get_summary_stats(salesprice, ENGMeanScaleScore15, calcacres, median_income, age, pct_white, pct_black, 
-                            pct_collegeDegree, median_house_value, HHsize, type = "mean_sd") -> sumdata4
+                            pct_collegeDegree, median_house_value, HHsize, tract_cover, total_crime_house, pct_renter_occupied, type = "mean_sd") -> sumdata4
 
 LL <- FnTwo(par3,d=d,x=X,y=Y) + FnFour(g,d=d,z=Z,y=Y);
 AIC <- -2*LL+2*niv
@@ -316,9 +321,9 @@ data_ols <- subset(datanew, prob==4) #change prob==2
 Y <- I(data_ols$salesprice)/100000
 
 X <- cbind(1, I(log(data_ols$calcacres)), I(log((data_ols$ENGMeanScaleScore15)/100)), I(log((data_ols$median_income)/10000)), I(data_ols$age), 
-           I(data_ols$age*data_ols$age)/1000, I(data_ols$totbath), I(data_ols$stories), I(data_ols$centheat), I(data_ols$fourthquart),
-           I(data_ols$pct_renter_occupied), I(data_ols$sqft)/1000, I(data_ols$lon-data_ols$plon), I(data_ols$lat-data_ols$plat), 
-           I((data_ols$lon-data_ols$plon)^2)/1000, I((data_ols$lat-data_ols$plat)^2)/1000)
+           I(data_ols$age*data_ols$age)/1000, I(data_ols$totbath), I(data_ols$stories), I(data_ols$centheat), I(data_ols$fourthquart), I(data_ols$pct_renter_occupied),
+           I(data_ols$sqft)/1000, I(data_ols$lon-data_ols$plon), I(data_ols$lat-data_ols$plat), I((data_ols$lon-data_ols$plon)^2)/1000, I((data_ols$lat-data_ols$plat)^2)/1000,
+           I(data_ols$tract_cover), I(data_ols$total_crime_house))
 
 X <- cbind(1, I(log(data_ols$calcacres)), I(log((data_ols$ENGMeanScaleScore15)/100)), I(log((data_ols$median_income)/10000)), I(data_ols$age), 
            I(data_ols$age*data_ols$age)/1000, I(data_ols$totbath), I(data_ols$stories), I(data_ols$centheat), I(data_ols$fourthquart),
@@ -344,7 +349,7 @@ Y <- I(datanew$salesprice)/100000
 X <- cbind(1, I(log(datanew$calcacres)), I(log((datanew$ENGMeanScaleScore15)/100)), I(log((datanew$median_income)/10000)), I(datanew$age), 
            I(datanew$age*datanew$age)/1000, I(datanew$totbath), I(datanew$stories), I(datanew$centheat), I(datanew$fourthquart),
            I(datanew$pct_renter_occupied), I(datanew$sqft)/1000, I(datanew$lon-datanew$plon), I(datanew$lat-datanew$plat), 
-           I((datanew$lon-datanew$plon)^2)/1000, I((datanew$lat-datanew$plat)^2)/1000)
+           I((datanew$lon-datanew$plon)^2)/1000, I((datanew$lat-datanew$plat)^2)/1000, I(datanew$tract_cover), I(datanew$total_crime_house))
 
 ols_agg <- lm(Y~X-1);
 pred <- predict(ols_agg, newdata = data.frame(X))
