@@ -67,15 +67,15 @@ Y <- I(data$salesprice)/100000
 
 #house attributes
 
-X <- cbind(1, I(log(data$calcacres)), I(log((data$ENGMeanScaleScore15)/100)), I(log((data$median_income)/10000)), I(data$age), 
-           I(data$age*data$age)/1000, I(data$totbath), I(data$stories), I(data$centheat), I(data$fourthquart), I(data$pct_renter_occupied),
-           I(data$sqft)/1000, I(data$lon-data$plon), I(data$lat-data$plat), I((data$lon-data$plon)^2)/1000, I((data$lat-data$plat)^2)/1000,
-           I(data$tract_cover), I(data$total_crime_house))
+X <- cbind(1, I(log(data$calcacres)), I(log((data$median_income)/10000)), I(data$age), 
+           I(data$age*data$age)/1000, I(data$totbath), I(data$stories), I(data$centheat), I(data$fourthquart),
+           I(data$sqft)/1000, I(data$lon-data$plon), I(data$lat-data$plat), I((data$lon-data$plon)^2)/1000, I((data$lat-data$plat)^2)/1000) 
+I(data$pct_black), crime
 
 #demographic variables/mixing variables 
 
 Z <- cbind(1,I(data$ENGMeanScaleScore15)/100, I(data$calcacres), I(data$median_income)/10000, I(data$pct_black), I(data$pct_renter_occupied),
-           I(data$pct_collegeDegree), I(data$median_house_value)/100000, I(data$tract_cover), I(data$total_crime_house))
+           I(data$pct_collegeDegree), I(data$tract_cover), I(data$total_crime_house), I(data$sqft)/1000) #hh size and score only sort
 
 
 ols_agg <- lm(Y~X-1);
@@ -308,7 +308,7 @@ rmse2 <- sqrt(mean((resid)^2))
 ########## EXTRA OLS ##########
 
 prob <- read.csv("prob2.csv")
-datanew <- cbind(newdata, prob)
+datanew <- cbind(data, prob)
 datanew$prob <- ifelse(datanew$V1 > datanew$V2, 1, 2)
 
 data1 <- subset(datanew, prob==1)
@@ -413,10 +413,17 @@ data$yhat <- ((1*beta[1,1]+data$calcacres*beta[2,1]+data$stories*beta[3,1]+
 data$resid <- data$salesprice-data$yhat
 rmse2 <- sqrt(mean((data$resid)^2))
 
+#house attributes
 
+X <- cbind(1, I(log(data$calcacres)), I(log((data$ENGMeanScaleScore15)/100)), I(log((data$median_income)/10000)), I(data$age), 
+           I(data$age*data$age)/1000, I(data$totbath), I(data$stories), I(data$centheat), I(data$fourthquart), I(data$pct_renter_occupied),
+           I(data$sqft)/1000, I(data$lon-data$plon), I(data$lat-data$plat), I((data$lon-data$plon)^2)/1000, I((data$lat-data$plat)^2)/1000,
+           I(data$tract_cover), I(data$total_crime_house))
 
+#demographic variables/mixing variables 
 
-
+Z <- cbind(1,I(data$ENGMeanScaleScore15)/100, I(data$calcacres), I(data$median_income)/10000, I(data$pct_black), I(data$pct_renter_occupied),
+           I(data$pct_collegeDegree), I(data$median_house_value)/100000, I(data$tract_cover), I(data$total_crime_house))
 
 
 
