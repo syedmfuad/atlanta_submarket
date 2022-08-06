@@ -1,60 +1,64 @@
+
+library(tidyverse)
+library(spdep)
+library(spatialreg)
+library(rgdal)
+library(rgeos)
+library(dplyr)
+library(sp)
+library(rgeos)
+library(geosphere)
+library(rstatix)
+library(gap)
+
 rm(list=ls())
 
+start.time <- Sys.time()
+
 set.seed(12345)
-data <- read.csv("atlanta single family.csv")
+data <- read.csv("atlanta single family new.csv")
 data$sqft <- as.numeric(data$sqft)
 data <- subset(data, sqft>0)
 
 data$lon <- -1*data$lon
-data$plon <- 0 #84.3563
-data$plat <- 0 #33.7663
-
-data %>% select(salesprice, calcacres, ENGMeanScaleScore15, median_income, age, totbath, stories, centheat, fourthquart, pct_renter_occupied,
-                sqft, lon, plon, lat, plat, pct_white, pct_black, pct_collegeDegree, median_house_value, HHsize, tract_cover,
-                total_crime_house) -> data
-data$lon <- -1*data$lon
-data <- data[complete.cases(data), ]
-
-data_sp <- data
-
-coordinates(data_sp) <- ~lon+lat
-
-class(data_sp) #check if SpatialPointsDataFrame
-d <- distm(data_sp)
-
-#d <- gDistance(data_sp, byid=T)
-min.d <- apply(d, 1, function(x) order(x, decreasing=F)[2])
-
-newdata <- cbind(data, data[min.d,], apply(d, 1, function(x) sort(x, decreasing=F)[2]))
-
-colnames(newdata) <- c(colnames(data), "salesprice_n", "calcacres_n", "ENGMeanScaleScore15_n", "median_income_n", "age_n", "totbath_n",
-                       "stories_n", "centheat_n", "fourthquart_n", "pct_renter_occupied_n", "sqft_n", "lon_n", "plon_n", "lat_n", "plat_n",
-                       "pct_white_n", "pct_black_n", "pct_collegeDegree_n", "median_house_value_n", "HHsize_n", "tract_cover_n", 
-                       "total_crime_house_n", "distance")
-
+data$plon <- 0
+data$plat <- 0
 
 #fully endogenized
 
-data <- newdata
-
-data %>% select(salesprice, calcacres, ENGMeanScaleScore15, median_income, age, totbath, stories, centheat, fourthquart, pct_renter_occupied,
+data %>% select(salesprice, calcacres, ENGMeanScaleScore15, median_income, age, totbath, rmtot, rmbed, fixtot, fixhalf, fixaddl, 
+                fourthquart, pct_renter_occupied, dcdu, pct_above_f, pct_below_f, MATHMeanScaleScore15, pct_HSdiploma, log_median_income,
                 sqft, lon, plon, lat, plat, pct_white, pct_black, pct_collegeDegree, median_house_value, HHsize, tract_cover, 
                 total_crime_house) -> data
+
+data$fixaddl <- as.factor(data$fixaddl)
+data$dcdu <- as.factor(data$dcdu)
+data$fourthquart <- as.factor(data$fourthquart)
+
 data <- data[complete.cases(data), ]
+
+#data$pct_change <- ifelse(data$pct_above_f>0, data$pct_above_f, -1*data$pct_below_f)
 
 Y <- I(data$salesprice)/100000
 
 #house attributes
 
-X <- cbind(1, I(log(data$calcacres)), I(log((data$ENGMeanScaleScore15)/100)), I(log((data$median_income)/10000)), I(data$age), 
-           I(data$age*data$age)/1000, I(data$totbath), I(data$stories), I(data$centheat), I(data$fourthquart), I(data$pct_renter_occupied),
-           I(data$sqft)/1000, I(data$lon-data$plon), I(data$lat-data$plat), I((data$lon-data$plon)^2)/1000, I((data$lat-data$plat)^2)/1000,
-           I(data$tract_cover), I(data$total_crime_house))
+#I(data$pct_above_f), I(data$pct_below_f),
+
+data$pct_above_f <- ifelse(data$pct_above_f > 0.05, 1, 0)
+data$pct_below_f <- ifelse(data$pct_below_f > 0.05, 1, 0)
+
+X <- cbind(1, I(log(data$calcacres)), I(data$age), 
+           I(data$age*data$age)/1000, I(data$totbath),
+           I(data$sqft)/1000, I(data$tract_cover), I(data$total_crime_house),
+           I(data$MATHMeanScaleScore15), I(data$pct_black), I(data$pct_above_f), I(data$pct_below_f),
+           I(data$lon-data$plon), I(data$lat-data$plat), I((data$lon-data$plon)^2)/1000, I((data$lat-data$plat)^2)/1000)
 
 #demographic variables/mixing variables 
 
-Z <- cbind(1,I(data$ENGMeanScaleScore15)/100, I(data$calcacres), I(data$median_income)/10000, I(data$pct_black), I(data$pct_renter_occupied),
-           I(data$pct_collegeDegree), I(data$median_house_value)/100000, I(data$tract_cover), I(data$total_crime_house))
+Z <- cbind(1,I(data$pct_black), I(data$pct_renter_occupied),
+           I(data$pct_collegeDegree), I(data$MATHMeanScaleScore15), I(data$pct_HSdiploma), I(data$log_median_income))
+
 
 ols_agg <- lm(Y~X-1);
 summary(ols_agg)
@@ -233,6 +237,10 @@ FMM <- function(par,X,Z,y)
 
 mix <- FMM(val_start,X=X,Z=Z,y=Y)
 
+end.time <- Sys.time()
+
+start.time-end.time
+
 #final updating:
 
 d <- mix$i_type
@@ -250,51 +258,19 @@ b <- matrix(b,niv,j);
 b1 <- matrix(b,(niv*j),1); 
 par3 <- c(b1,s);
 
-
-########## EXTRA ##########
-
-datanew <- cbind(newdata, d)
-datanew$prob <- colnames(datanew[, c(46:49)])[apply(datanew[, c(46:49)],1,which.max)]
-datanew$prob <- as.numeric(datanew$prob)
-
-data1 <- subset(datanew, prob==1)
-data2 <- subset(datanew, prob==2)
-data3 <- subset(datanew, prob==3)
-data4 <- subset(datanew, prob==4)
-
-data1 %>% get_summary_stats(salesprice, ENGMeanScaleScore15, calcacres, median_income, age, pct_white, pct_black, 
-                            pct_collegeDegree, median_house_value, HHsize, tract_cover, total_crime_house, pct_renter_occupied, type = "mean_sd") -> sumdata1
-data2 %>% get_summary_stats(salesprice, ENGMeanScaleScore15, calcacres, median_income, age, pct_white, pct_black, 
-                            pct_collegeDegree, median_house_value, HHsize, tract_cover, total_crime_house, pct_renter_occupied, type = "mean_sd") -> sumdata2
-data3 %>% get_summary_stats(salesprice, ENGMeanScaleScore15, calcacres, median_income, age, pct_white, pct_black, 
-                            pct_collegeDegree, median_house_value, HHsize, tract_cover, total_crime_house, pct_renter_occupied, type = "mean_sd") -> sumdata3
-data4 %>% get_summary_stats(salesprice, ENGMeanScaleScore15, calcacres, median_income, age, pct_white, pct_black, 
-                            pct_collegeDegree, median_house_value, HHsize, tract_cover, total_crime_house, pct_renter_occupied, type = "mean_sd") -> sumdata4
-
 LL <- FnTwo(par3,d=d,x=X,y=Y) + FnFour(g,d=d,z=Z,y=Y);
 AIC <- -2*LL+2*niv
 
-Ds=d;
-beta=b;
-#bse=cbind(bse1,bse2);
-gamma=cbind(g[1:gvs],g[(gvs+1):(2*gvs)]);
-#gse=cbind(gse1);
+########## WRITE CSV ##########
 
-X <- cbind(1, I(log(data$calcacres)), I(log((data$ENGMeanScaleScore15)/100)), I(log((data$median_income)/10000)), I(data$age), 
-           I(data$age*data$age)/1000, I(data$totbath), I(data$stories), I(data$centheat), I(data$fourthquart), I(data$pct_renter_occupied),
-           I(data$sqft)/1000, I(data$lon-data$plon), I(data$lat-data$plat), I((data$lon-data$plon)^2)/1000, I((data$lat-data$plat)^2)/1000,
-           I(data$tract_cover), I(data$total_crime_house))
+write.csv(b, file="beta4.csv")
+write.csv(d, file="prob4.csv")
 
-pred <- (X%*%b[,1]*Ds[,1] + X%*%b[,2]*Ds[,2] + X%*%b[,3]*Ds[,3] + X%*%b[,4]*Ds[,4])*100000
-
-resid <- Y-pred
-rmse2 <- sqrt(mean((resid)^2))
-
-########## EXTRA OLS ##########
+########## EXTRA ##########
 
 prob <- read.csv("prob4.csv")
-datanew <- cbind(newdata, prob)
-datanew$prob <- colnames(datanew[, c(46:49)])[apply(datanew[, c(46:49)],1,which.max)]
+datanew <- cbind(data, prob)
+datanew$prob <- colnames(datanew[, c(33:36)])[apply(datanew[, c(33:36)],1,which.max)]
 datanew$prob <- ifelse(datanew$prob=="V1", 1, ifelse(datanew$prob=="V2", 2, ifelse(datanew$prob=="V3", 3, 4)))
 
 data1 <- subset(datanew, prob==1)
@@ -302,101 +278,146 @@ data2 <- subset(datanew, prob==2)
 data3 <- subset(datanew, prob==3)
 data4 <- subset(datanew, prob==4)
 
-data1 %>% get_summary_stats(salesprice, ENGMeanScaleScore15, calcacres, median_income, age, pct_white, pct_black, 
-                            pct_collegeDegree, median_house_value, HHsize, tract_cover, total_crime_house, pct_renter_occupied, type = "mean_sd") -> sumdata1
-data2 %>% get_summary_stats(salesprice, ENGMeanScaleScore15, calcacres, median_income, age, pct_white, pct_black, 
-                            pct_collegeDegree, median_house_value, HHsize, tract_cover, total_crime_house, pct_renter_occupied, type = "mean_sd") -> sumdata2
-data3 %>% get_summary_stats(salesprice, ENGMeanScaleScore15, calcacres, median_income, age, pct_white, pct_black, 
-                            pct_collegeDegree, median_house_value, HHsize, tract_cover, total_crime_house, pct_renter_occupied, type = "mean_sd") -> sumdata3
-data4 %>% get_summary_stats(salesprice, ENGMeanScaleScore15, calcacres, median_income, age, pct_white, pct_black, 
-                            pct_collegeDegree, median_house_value, HHsize, tract_cover, total_crime_house, pct_renter_occupied, type = "mean_sd") -> sumdata4
+data1 %>% get_summary_stats(salesprice, MATHMeanScaleScore15, calcacres, median_income, age, pct_white, pct_black, 
+                            pct_collegeDegree, median_house_value, tract_cover, total_crime_house, pct_renter_occupied, type = "mean_sd") -> sumdata1
+data2 %>% get_summary_stats(salesprice, MATHMeanScaleScore15, calcacres, median_income, age, pct_white, pct_black, 
+                            pct_collegeDegree, median_house_value, tract_cover, total_crime_house, pct_renter_occupied, type = "mean_sd") -> sumdata2
+data3 %>% get_summary_stats(salesprice, MATHMeanScaleScore15, calcacres, median_income, age, pct_white, pct_black, 
+                            pct_collegeDegree, median_house_value, tract_cover, total_crime_house, pct_renter_occupied, type = "mean_sd") -> sumdata3
+data4 %>% get_summary_stats(salesprice, MATHMeanScaleScore15, calcacres, median_income, age, pct_white, pct_black, 
+                            pct_collegeDegree, median_house_value, tract_cover, total_crime_house, pct_renter_occupied, type = "mean_sd") -> sumdata4
 
-LL <- FnTwo(par3,d=d,x=X,y=Y) + FnFour(g,d=d,z=Z,y=Y);
-AIC <- -2*LL+2*niv
+########## OLS ##########
 
-##### OLS #####
+Y <- I(data1$salesprice)/100000
 
-data_ols <- subset(datanew, prob==4) #change prob==2
-
-Y <- I(data_ols$salesprice)/100000
-
-X <- cbind(1, I(log(data_ols$calcacres)), I(log((data_ols$ENGMeanScaleScore15)/100)), I(log((data_ols$median_income)/10000)), I(data_ols$age), 
-           I(data_ols$age*data_ols$age)/1000, I(data_ols$totbath), I(data_ols$stories), I(data_ols$centheat), I(data_ols$fourthquart), I(data_ols$pct_renter_occupied),
-           I(data_ols$sqft)/1000, I(data_ols$lon-data_ols$plon), I(data_ols$lat-data_ols$plat), I((data_ols$lon-data_ols$plon)^2)/1000, I((data_ols$lat-data_ols$plat)^2)/1000,
-           I(data_ols$tract_cover), I(data_ols$total_crime_house))
-
-X <- cbind(1, I(log(data_ols$calcacres)), I(log((data_ols$ENGMeanScaleScore15)/100)), I(log((data_ols$median_income)/10000)), I(data_ols$age), 
-           I(data_ols$age*data_ols$age)/1000, I(data_ols$totbath), I(data_ols$stories), I(data_ols$centheat), I(data_ols$fourthquart),
-           I(data_ols$pct_renter_occupied), I(data_ols$sqft)/1000, I(data_ols$lon-data_ols$plon), I(data_ols$lat-data_ols$plat), 
-           I((data_ols$lon-data_ols$plon)^2)/1000, I((data_ols$lat-data_ols$plat)^2)/1000, 
-           I(log(data_ols$calcacres_n)), I(log((data_ols$ENGMeanScaleScore15_n)/100)), I(log((data_ols$median_income_n)/10000)), I(data_ols$age_n), 
-           I(data_ols$age_n*data_ols$age_n)/1000, I(data_ols$totbath_n), I(data_ols$stories_n), I(data_ols$centheat_n), I(data_ols$fourthquart_n),
-           I(data_ols$pct_renter_occupied_n), I(data_ols$sqft_n)/1000, I(data_ols$lon_n-data_ols$plon_n), I(data_ols$lat_n-data_ols$plat_n), 
-           I((data_ols$lon_n-data_ols$plon_n)^2)/1000, I((data_ols$lat_n-data_ols$plat_n)^2)/1000)
-
+X <- cbind(1, I(log(data1$calcacres)), I(data1$age), 
+           I(data1$age*data1$age)/1000, I(data1$totbath),
+           I(data1$sqft)/1000, I(data1$tract_cover), I(data1$total_crime_house),
+           I(data1$MATHMeanScaleScore15), I(data1$pct_black), I(data1$pct_above_f), I(data1$pct_below_f),
+           I(data1$lon-data1$plon), I(data1$lat-data1$plat), I((data1$lon-data1$plon)^2)/1000, I((data1$lat-data1$plat)^2)/1000)
 
 ols_agg <- lm(Y~X-1);
 summary(ols_agg)
+
 deviance(ols_agg)
-
 pred <- predict(ols_agg, newdata = data.frame(X))
-sqrt(mean((Y*100000 - pred*100000)^2))
+sqrt(mean((Y - pred)^2))*100000
+extractAIC(ols_agg)
 
-#weighted RMSE
 
-Y <- I(datanew$salesprice)/100000
+Y <- I(data2$salesprice)/100000
 
-X <- cbind(1, I(log(datanew$calcacres)), I(log((datanew$ENGMeanScaleScore15)/100)), I(log((datanew$median_income)/10000)), I(datanew$age), 
-           I(datanew$age*datanew$age)/1000, I(datanew$totbath), I(datanew$stories), I(datanew$centheat), I(datanew$fourthquart),
-           I(datanew$pct_renter_occupied), I(datanew$sqft)/1000, I(datanew$lon-datanew$plon), I(datanew$lat-datanew$plat), 
-           I((datanew$lon-datanew$plon)^2)/1000, I((datanew$lat-datanew$plat)^2)/1000, I(datanew$tract_cover), I(datanew$total_crime_house))
+X <- cbind(1, I(log(data2$calcacres)), I(data2$age), 
+           I(data2$age*data2$age)/1000, I(data2$totbath),
+           I(data2$sqft)/1000, I(data2$tract_cover), I(data2$total_crime_house),
+           I(data2$MATHMeanScaleScore15), I(data2$pct_black), I(data2$pct_above_f), I(data2$pct_below_f),
+           I(data2$lon-data2$plon), I(data2$lat-data2$plat), I((data2$lon-data2$plon)^2)/1000, I((data2$lat-data2$plat)^2)/1000)
 
 ols_agg <- lm(Y~X-1);
+summary(ols_agg)
+
+deviance(ols_agg)
 pred <- predict(ols_agg, newdata = data.frame(X))
-sqrt(mean((Y - pred*datanew$V1-pred*datanew$V2-pred*datanew$V3--pred*datanew$V4)^2))*100000
+sqrt(mean((Y - pred)^2))*100000
+extractAIC(ols_agg)
+
+
+Y <- I(data3$salesprice)/100000
+
+X <- cbind(1, I(log(data3$calcacres)), I(data3$age), 
+           I(data3$age*data3$age)/1000, I(data3$totbath),
+           I(data3$sqft)/1000, I(data3$tract_cover), I(data3$total_crime_house),
+           I(data3$MATHMeanScaleScore15), I(data3$pct_black), I(data3$pct_above_f), I(data3$pct_below_f),
+           I(data3$lon-data3$plon), I(data3$lat-data3$plat), I((data3$lon-data3$plon)^2)/1000, I((data3$lat-data3$plat)^2)/1000)
+
+ols_agg <- lm(Y~X-1);
+summary(ols_agg)
+
+deviance(ols_agg)
+pred <- predict(ols_agg, newdata = data.frame(X))
+sqrt(mean((Y - pred)^2))*100000
+extractAIC(ols_agg)
+
+
+Y <- I(data4$salesprice)/100000
+
+X <- cbind(1, I(log(data4$calcacres)), I(data4$age), 
+           I(data4$age*data4$age)/1000, I(data4$totbath),
+           I(data4$sqft)/1000, I(data4$tract_cover), I(data4$total_crime_house),
+           I(data4$MATHMeanScaleScore15), I(data4$pct_black), I(data4$pct_above_f), I(data4$pct_below_f),
+           I(data4$lon-data4$plon), I(data4$lat-data4$plat), I((data4$lon-data4$plon)^2)/1000, I((data4$lat-data4$plat)^2)/1000)
+
+ols_agg <- lm(Y~X-1);
+summary(ols_agg)
+
+deviance(ols_agg)
+pred <- predict(ols_agg, newdata = data.frame(X))
+sqrt(mean((Y - pred)^2))*100000
+extractAIC(ols_agg)
+
+########## BETAS ##########
+
+beta <- read.csv("beta4.csv")
+
+Y <- I(data$salesprice)/100000
+
+X <- cbind(1, I(log(data$calcacres)), I(data$age), 
+           I(data$age*data$age)/1000, I(data$totbath),
+           I(data$sqft)/1000, I(data$tract_cover), I(data$total_crime_house),
+           I(data$MATHMeanScaleScore15), I(data$pct_black), I(data$pct_above_f), I(data$pct_below_f),
+           I(data$lon-data$plon), I(data$lat-data$plat), I((data$lon-data$plon)^2)/1000, I((data$lat-data$plat)^2)/1000)
+
+pred <- (X%*%beta[,2]*prob[,2] + X%*%beta[,3]*prob[,3] + X%*%beta[,4]*prob[,4] + X%*%beta[,5]*prob[,5])
+resid <- Y-pred
+sqrt(mean((resid)^2))*100000
+
+########## CHOW TEST ##########
+
+Y1 <- I(data1$salesprice)/100000
+
+X1 <- cbind(1, I(log(data1$calcacres)), I(data1$age), 
+            I(data1$age*data1$age)/1000, I(data1$totbath),
+            I(data1$sqft)/1000, I(data1$tract_cover), I(data1$total_crime_house),
+            I(data1$MATHMeanScaleScore15), I(data1$pct_black), I(data1$pct_above_f), I(data1$pct_below_f),
+            I(data1$lon-data1$plon), I(data1$lat-data1$plat), I((data1$lon-data1$plon)^2)/1000, I((data1$lat-data1$plat)^2)/1000)
+
+ols_agg1 <- lm(Y1~X1-1);
+
+Y2 <- I(data2$salesprice)/100000
+
+X2 <- cbind(1, I(log(data2$calcacres)), I(data2$age), 
+            I(data2$age*data2$age)/1000, I(data2$totbath),
+            I(data2$sqft)/1000, I(data2$tract_cover), I(data2$total_crime_house),
+            I(data2$MATHMeanScaleScore15), I(data2$pct_black), I(data2$pct_above_f), I(data2$pct_below_f),
+            I(data2$lon-data2$plon), I(data2$lat-data2$plat), I((data2$lon-data2$plon)^2)/1000, I((data2$lat-data2$plat)^2)/1000)
+
+ols_agg2 <- lm(Y2~X2-1);
+
+Y3 <- I(data3$salesprice)/100000
+
+X3 <- cbind(1, I(log(data3$calcacres)), I(data3$age), 
+            I(data3$age*data3$age)/1000, I(data3$totbath),
+            I(data3$sqft)/1000, I(data3$tract_cover), I(data3$total_crime_house),
+            I(data3$MATHMeanScaleScore15), I(data3$pct_black), I(data3$pct_above_f), I(data3$pct_below_f),
+            I(data3$lon-data3$plon), I(data3$lat-data3$plat), I((data3$lon-data3$plon)^2)/1000, I((data3$lat-data3$plat)^2)/1000)
+
+ols_agg3 <- lm(Y3~X3-1);
+
+Y4 <- I(data4$salesprice)/100000
+
+X4 <- cbind(1, I(log(data4$calcacres)), I(data4$age), 
+            I(data4$age*data4$age)/1000, I(data4$totbath),
+            I(data4$sqft)/1000, I(data4$tract_cover), I(data4$total_crime_house),
+            I(data4$MATHMeanScaleScore15), I(data4$pct_black), I(data4$pct_above_f), I(data4$pct_below_f),
+            I(data4$lon-data4$plon), I(data4$lat-data4$plat), I((data4$lon-data4$plon)^2)/1000, I((data4$lat-data4$plat)^2)/1000)
+
+ols_agg4 <- lm(Y4~X4-1);
+
+chow.test(Y3,X3[,-1],Y4,X4[,-1])
 
 
 
 
 
 
-
-
-
-
-#standard errors
-
-beta_opt <- optim(par3,FnTwo,d=d,x=X,y=Y,control=list(fnscale=-1,maxit=10000, ndeps=rep(0.00005, 28)),
-                  hessian=TRUE, method = c("Nelder-Mead", "BFGS", "CG", "L-BFGS-B", "SANN", "Brent"))
-b <- matrix(beta_opt$par[1:(j*niv)],niv,j); 
-bse1 <- sqrt(-diag(solve(beta_opt$hessian[1:niv,1:niv])))
-bse2 <- sqrt(-diag(solve(beta_opt$hessian[(niv+1):(2*niv),(niv+1):(2*niv)])))
-bse3 <- sqrt(-diag(solve(beta_opt$hessian[(niv*2+1):(3*niv),(niv*2+1):(3*niv)])))
-
-s <- beta_opt$par[(j*niv+1):(j*(niv+1))]
-
-gamma_opt <- optim(g,FnFour,d=d,z=Z,y=Y,control=list(fnscale=-1,maxit=100000),hessian=TRUE)
-g <- gamma_opt$par
-gse1 <- sqrt(-diag(solve(gamma_opt$hessian[1:gvs,1:gvs])))
-
-par2 <- matrix(b,(niv*j),1);  
-par2 <- c(par2,s)
-
-LL <- FnTwo(par2,d=d,x=X,y=Y) + FnFour(g,d=d,z=Z,y=Y);
-AIC <- -2*LL+2*niv
-
-Ds=d; #probabilities of belonging in submarkets
-beta=b; #beta estimates
-bse=cbind(bse1,bse2,bse3); #standard errors
-gamma=cbind(g[1:gvs],g[(gvs+1):(2*gvs)]);
-gse=cbind(gse1);
-
-row_nombre <- c("Intercept","Lot Size","Stories", "House Age", "Central Heat", "Total Bath")
-
-write.table(b, file= paste0(path,"Beta.csv"),quote = FALSE, row.names= row_nombre, col.names=col_nombre, sep=",")
-write.table(bse, file= paste0(path,"Bse.csv"),quote = FALSE, row.names= row_nombre, col.names=col_nombre, sep=",")
-write.table(LL, file= paste0(path,"LL.csv"),quote = FALSE, row.names= TRUE, col.names=TRUE, sep=",")
-write.table(s, file= paste0(path,"S.csv"),quote = FALSE, row.names= TRUE, col.names=TRUE, sep=",")
-write.table(gse1, file= paste0(path,"Gse.csv"),quote = FALSE, row.names= TRUE, col.names=TRUE, sep=",")
-write.table(gamma, file= paste0(path,"Gamma.csv"),quote = FALSE, row.names= TRUE, col.names=TRUE, sep=",")
-write.table(d, file= paste0(path,"Dhats.csv"),quote = FALSE, row.names= TRUE, col.names=col_nombre, sep=",")

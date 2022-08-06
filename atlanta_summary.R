@@ -1,3 +1,11 @@
+#https://rural-urban.eu/sites/default/files/05_Spatial%20Autocorrelation%20and%20the%20Spatial%20Durbin%20Model_Eilers.pdf
+#https://d-nb.info/1188635956/34
+#http://rstudio-pubs-static.s3.amazonaws.com/5027_52298866e7924b18b54e5c9a0a21b450.html
+#https://stats.stackexchange.com/questions/149415/how-do-i-interpret-lagsarlm-output-from-rs-spdep
+#https://rpubs.com/corey_sparks/109650
+#https://rpubs.com/corey_sparks/108130
+#https://www.stata.com/training/webinar_series/spatial-autoregressive-models/spatial/resource/spillover.html
+
 library(dplyr)
 library(sp)
 library(rgeos)
